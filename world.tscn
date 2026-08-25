@@ -1,0 +1,191 @@
+[gd_scene format=3 uid="uid://cc5wepiijtk1c"]
+
+[ext_resource type="Script" uid="uid://dswjk47j3cg2y" path="res://world.gd" id="1_036b0"]
+[ext_resource type="Script" uid="uid://cwid3deqtdgc0" path="res://player.gd" id="1_f3sb7"]
+[ext_resource type="Script" uid="uid://bjad58rltninp" path="res://botspawner.gd" id="1_fj7yv"]
+[ext_resource type="Script" uid="uid://6h8bwbdoye2o" path="res://hud.gd" id="2_gbfbk"]
+[ext_resource type="Script" uid="uid://bjjukxg8dxu1u" path="res://game_menu.gd" id="2_pkg7o"]
+[ext_resource type="PackedScene" uid="uid://bkn8cedbon18j" path="res://bot.tscn" id="2_tlwt5"]
+[ext_resource type="Script" uid="uid://b4k0egymj5rjm" path="res://vandal.gd" id="5_dwbse"]
+[ext_resource type="Script" uid="uid://cfv5s1ul7n107" path="res://karambit.gd" id="7_wse8f"]
+[ext_resource type="Script" uid="uid://d2wmuendaslje" path="res://collision_shape_3d.gd" id="8_gbfbk"]
+[ext_resource type="Script" uid="uid://bcbk6mtmaqvk2" path="res://orb.gd" id="8_ioo17"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_dbpwn"]
+albedo_color = Color(0.37036446, 0.3703645, 0.37036446, 0.8784314)
+
+[sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_aqk2v"]
+sky_top_color = Color(0.8429376, 0, 0.11934436, 1)
+sky_horizon_color = Color(0.8980392, 0, 0, 1)
+sky_cover_modulate = Color(1, 0.4392157, 1, 1)
+ground_bottom_color = Color(0, 0.2509804, 0, 1)
+ground_horizon_color = Color(0.64705884, 0, 0, 1)
+
+[sub_resource type="Sky" id="Sky_f3sb7"]
+sky_material = SubResource("ProceduralSkyMaterial_aqk2v")
+
+[sub_resource type="Environment" id="Environment_n6udw"]
+background_mode = 2
+background_energy_multiplier = 16.0
+sky = SubResource("Sky_f3sb7")
+
+[sub_resource type="Animation" id="Animation_ic0uy"]
+resource_name = "Karmbit_slash"
+length = 0.19999999999999998
+step = 0.035
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("Player/Weapon holder/Karambit:position")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0.10003906, 0.8095),
+"transitions": PackedFloat32Array(1, 1),
+"update": 0,
+"values": [Vector3(0, 0, 0), Vector3(0, 0, 0)]
+}
+tracks/1/type = "value"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("Player/Weapon holder/Karambit:rotation")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/keys = {
+"times": PackedFloat32Array(0, 0.10003906),
+"transitions": PackedFloat32Array(1, 1),
+"update": 0,
+"values": [Vector3(0, 0, 0), Vector3(0, 0, 0)]
+}
+
+[sub_resource type="Animation" id="Animation_k3n1d"]
+length = 0.001
+tracks/0/type = "value"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("Player/Weapon holder/Karambit:position")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 0,
+"values": [Vector3(0, 0, 0)]
+}
+tracks/1/type = "value"
+tracks/1/imported = false
+tracks/1/enabled = true
+tracks/1/path = NodePath("Player/Weapon holder/Karambit:rotation")
+tracks/1/interp = 1
+tracks/1/loop_wrap = true
+tracks/1/keys = {
+"times": PackedFloat32Array(0),
+"transitions": PackedFloat32Array(1),
+"update": 0,
+"values": [Vector3(0, 0, 0)]
+}
+
+[sub_resource type="AnimationLibrary" id="AnimationLibrary_2o6r5"]
+_data = {
+&"Karmbit_slash": SubResource("Animation_ic0uy"),
+&"RESET": SubResource("Animation_k3n1d")
+}
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_gitq5"]
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_gitq5"]
+
+[node name="World" type="Node3D" unique_id=1281418974]
+script = ExtResource("1_036b0")
+
+[node name="Hud" type="Control" parent="." unique_id=1018506821]
+layout_mode = 3
+anchors_preset = 0
+offset_right = 40.0
+offset_bottom = 40.0
+script = ExtResource("2_gbfbk")
+
+[node name="Game menu" type="Control" parent="." unique_id=1884810630]
+layout_mode = 3
+anchors_preset = 0
+offset_right = 40.0
+offset_bottom = 40.0
+script = ExtResource("2_pkg7o")
+
+[node name="Wall" type="CSGBox3D" parent="." unique_id=27245353]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8.571948, 0.9480009, -0.5868683)
+use_collision = true
+size = Vector3(2.9511719, 6.846222, 19.079918)
+
+[node name="Wall2" type="CSGBox3D" parent="." unique_id=1110271383]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.1560092, 2.206174, 9.274953)
+use_collision = true
+size = Vector3(19.4729, 4.2627563, 1.3271332)
+
+[node name="Wall3" type="CSGBox3D" parent="." unique_id=2144802664]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.43419337, 2.4849079, -8.525867)
+use_collision = true
+size = Vector3(18.10205, 3.6440582, 2.9042168)
+
+[node name="Wall4" type="CSGBox3D" parent="." unique_id=1096969553]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -9.262971, 2.363226, -0.04111147)
+use_collision = true
+size = Vector3(1.3702393, 4.013214, 20.068054)
+
+[node name="Botspawner" type="Node3D" parent="." unique_id=323177214]
+script = ExtResource("1_fj7yv")
+bot_scene = ExtResource("2_tlwt5")
+spawn_radius = 10.0
+
+[node name="Floor" type="CSGBox3D" parent="." unique_id=861335585]
+transform = Transform3D(0.99986666, -0.016331147, 0, 0.016331147, 0.99986666, 0, 0, 0, 1, 0.06067109, 0.10192829, -0.09659672)
+layers = 255
+use_collision = true
+collision_layer = 255
+collision_mask = 255
+size = Vector3(19.95, 1, 20)
+material = SubResource("StandardMaterial3D_dbpwn")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=400271416]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+layers = 1023
+light_color = Color(0.6697388, 0.7867195, 0, 1)
+light_energy = 16.0
+light_indirect_energy = 0.0
+light_specular = 1.185
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=2045660154]
+environment = SubResource("Environment_n6udw")
+
+[node name="Player" type="CharacterBody3D" parent="." unique_id=494695098]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 3, 0)
+script = ExtResource("1_f3sb7")
+
+[node name="Weapon holder" type="Camera3D" parent="Player" unique_id=1755339199]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.12337899, 0.6167891, -0.020561814)
+
+[node name="Karambit" type="Node3D" parent="Player/Weapon holder" unique_id=312133455]
+script = ExtResource("7_wse8f")
+
+[node name="Animation player" type="AnimationPlayer" parent="Player/Weapon holder/Karambit" unique_id=890535684]
+root_node = NodePath("../../../..")
+libraries/ = SubResource("AnimationLibrary_2o6r5")
+
+[node name="RayCast3D" type="RayCast3D" parent="Player/Weapon holder" unique_id=1319917085]
+target_position = Vector3(0, 0, -100)
+
+[node name="Vandal" type="Node3D" parent="Player/Weapon holder" unique_id=1038758228]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.355, 0.3, 0.7)
+script = ExtResource("5_dwbse")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Player" unique_id=1946826805]
+shape = SubResource("CapsuleShape3D_gitq5")
+
+[node name="CanvasLayer" type="CanvasLayer" parent="Player" unique_id=479460325]
+
+[node name="Orb" type="Area3D" parent="." unique_id=650138953]
+script = ExtResource("8_ioo17")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Orb" unique_id=1427296314]
+shape = SubResource("SphereShape3D_gitq5")
+script = ExtResource("8_gbfbk")

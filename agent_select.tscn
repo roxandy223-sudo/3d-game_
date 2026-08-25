@@ -1,0 +1,10 @@
+[gd_scene format=3 uid="uid://b6mdxgaybiinr"]
+
+[ext_resource type="Script" uid="uid://du0oaherut2tg" path="res://agent_select.gd" id="1_xxkng"]
+
+[node name="Agent select" type="Control" unique_id=787313579]
+layout_mode = 3
+anchors_preset = 0
+offset_right = 40.0
+offset_bottom = 40.0
+script = ExtResource("1_xxkng")
