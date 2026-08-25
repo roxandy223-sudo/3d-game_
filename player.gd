@@ -1,1916 +1,293 @@
 extends CharacterBody3D
 
-# ============================================================
-# PLAYER
-# ============================================================
-
 const WALK_SPEED := 6.0
 const SPRINT_SPEED := 9.0
 const JUMP_SPEED := 5.0
 const GRAVITY := 16.0
-const AIR_CONTROL := 4.0
 const MOUSE_SENSITIVITY := 0.0025
 
 @onready var camera: Camera3D = $Camera3D
-
-var pitch := 0.0
-
-
-# ============================================================
-# WEAPONS
-# ============================================================
-
-const WEAPON_VANDAL := 0
-const WEAPON_KARAMBIT := 1
 
 const VANDAL_DAMAGE := 30.0
 const VANDAL_RANGE := 300.0
 const VANDAL_FIRE_DELAY := 0.10
 const VANDAL_MAG_SIZE := 25
 const VANDAL_RELOAD_TIME := 1.8
-
 const KARAMBIT_DAMAGE := 50.0
 const KARAMBIT_RANGE := 3.0
 const KARAMBIT_DELAY := 0.40
 
-var current_weapon := WEAPON_VANDAL
+var weapon_holder: Node3D
+var vandal: Node3D
+var karambit: Node3D
+var left_hand: MeshInstance3D
+var right_hand: MeshInstance3D
+var pitch := 0.0
 var ammo := VANDAL_MAG_SIZE
 var fire_timer := 0.0
 var knife_timer := 0.0
 var reload_timer := 0.0
 var reloading := false
-
-
-# ============================================================
-# WEAPONS
-# ============================================================
-
-var weapon_holder: Node3D
-var vandal: Node3D
-var karambit: Node3D
-
-var left_hand: MeshInstance3D
-var right_hand: MeshInstance3D
-
-
-# ============================================================
-# STATS
-# ============================================================
-
-var total_damage := 0.0
-var last_damage := 0.0
-var kills := 0
-
-var health := 100.0
-var max_health := 100.0
-
-
-# ============================================================
-# AGENTS
-# ============================================================
-
-# 1 = Jett
-# 2 = Reyna
-# 3 = Omen
-
-var selected_agent := 1
-
-var ability_ready := true
-var ability_cooldown := 0.0
-
+var knife_attacking := false
 var ult_points := 0
 var ult_cost := 8
-
+var selected_agent := 1
+var ability_cooldown := 0.0
+var health := 100.0
+var max_health := 100.0
+var kills := 0
+var total_damage := 0.0
 var reyna_soul_available := false
-var reyna_empress_active := false
-
-
-# ============================================================
-# CROSSHAIR
-# ============================================================
-
-var crosshair_layer: CanvasLayer
-
-
-# ============================================================
-# READY
-# ============================================================
 
 func _ready() -> void:
-
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-
-	create_crosshair()
 	create_weapon_holder()
 	create_hands()
 	create_vandal()
 	create_karambit()
-
+	set_selected_agent(str(get_tree().get_meta("selected_agent", "Jett")))
 	equip_vandal()
-
-	if get_tree().has_meta("selected_agent"):
-
-		set_selected_agent(
-			str(
-				get_tree().get_meta(
-					"selected_agent"
-				)
-			)
-		)
-
-	else:
-
-		update_ult_cost()
-
-
-# ============================================================
-# INPUT
-# ============================================================
+	create_crosshair()
 
 func _unhandled_input(event: InputEvent) -> void:
-
-	if event is InputEventMouseMotion:
-
-		if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-
-			rotate_y(
-				-event.relative.x *
-				MOUSE_SENSITIVITY
-			)
-
-			pitch -= (
-				event.relative.y *
-				MOUSE_SENSITIVITY
-			)
-
-			pitch = clamp(
-				pitch,
-				deg_to_rad(-89.0),
-				deg_to_rad(89.0)
-			)
-
-			camera.rotation.x = pitch
-
-
-	if event is InputEventKey:
-
-		var key := event as InputEventKey
-
-		if not key.pressed or key.echo:
-			return
-
-		match key.keycode:
-
-			KEY_ESCAPE:
-				toggle_mouse()
-
-			KEY_1:
-				set_selected_agent("Jett")
-
-			KEY_2:
-				set_selected_agent("Reyna")
-
-			KEY_3:
-				set_selected_agent("Omen")
-
-			KEY_V:
-				equip_vandal()
-
-			KEY_K:
-				equip_karambit()
-
-			KEY_R:
-				reload_vandal()
-
-			KEY_C:
-				use_ability_slot("C")
-
-			KEY_Q:
-				use_ability_slot("Q")
-
-			KEY_E:
-				use_ability_slot("E")
-
-			KEY_X:
-				use_ability_slot("X")
-
-
-func toggle_mouse() -> void:
-
-	if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-
-		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
-
-	else:
-
-		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-
-
-# ============================================================
-# PHYSICS
-# ============================================================
+	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		rotate_y(-event.relative.x * MOUSE_SENSITIVITY)
+		pitch = clamp(pitch - event.relative.y * MOUSE_SENSITIVITY, deg_to_rad(-89.0), deg_to_rad(89.0))
+		camera.rotation.x = pitch
+	elif event is InputEventKey and event.pressed and not event.echo:
+		match event.keycode:
+			KEY_ESCAPE: Input.mouse_mode = MOUSE_MODE_VISIBLE if Input.mouse_mode == MOUSE_MODE_CAPTURED else MOUSE_MODE_CAPTURED
+			KEY_1: set_selected_agent("Jett")
+			KEY_2: set_selected_agent("Reyna")
+			KEY_3: set_selected_agent("Omen")
+			KEY_V: equip_vandal()
+			KEY_K: equip_karambit()
+			KEY_R: reload_vandal()
+			KEY_C: use_ability("C")
+			KEY_Q: use_ability("Q")
+			KEY_E: use_ability("E")
+			KEY_X: use_ability("X")
 
 func _physics_process(delta: float) -> void:
-
-	fire_timer = max(
-		fire_timer - delta,
-		0.0
-	)
-
-	knife_timer = max(
-		knife_timer - delta,
-		0.0
-	)
-
+	fire_timer = max(fire_timer - delta, 0.0)
+	knife_timer = max(knife_timer - delta, 0.0)
+	ability_cooldown = max(ability_cooldown - delta, 0.0)
 	if reload_timer > 0.0:
-
 		reload_timer -= delta
-
-		if reload_timer <= 0.0:
-
-			finish_reload()
-
-	if ability_cooldown > 0.0:
-
-		ability_cooldown -= delta
-
-		if ability_cooldown <= 0.0:
-
-			ability_ready = true
-
+		if reload_timer <= 0.0: finish_reload()
 	handle_movement(delta)
-
-	if Input.is_mouse_button_pressed(
-		MOUSE_BUTTON_LEFT
-	):
-
-		if current_weapon == WEAPON_VANDAL:
-
-			shoot_vandal()
-
-		else:
-
-			attack_karambit()
-
+	if Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+		if current_weapon() == 0: shoot_vandal()
+		else: attack_karambit()
 	move_and_slide()
 
-
-# ============================================================
-# NORMAL MOVEMENT
-# ============================================================
-
 func handle_movement(delta: float) -> void:
-
-	var input_x := 0.0
-	var input_z := 0.0
-
-	if Input.is_key_pressed(KEY_A):
-		input_x -= 1.0
-
-	if Input.is_key_pressed(KEY_D):
-		input_x += 1.0
-
-	if Input.is_key_pressed(KEY_W):
-		input_z -= 1.0
-
-	if Input.is_key_pressed(KEY_S):
-		input_z += 1.0
-
-	var direction := (
-		transform.basis.x * input_x
-		+
-		transform.basis.z * input_z
-	)
-
+	var x := Input.get_axis("ui_left", "ui_right")
+	var z := Input.get_axis("ui_up", "ui_down")
+	if Input.is_key_pressed(KEY_A): x = -1.0
+	if Input.is_key_pressed(KEY_D): x = 1.0
+	if Input.is_key_pressed(KEY_W): z = -1.0
+	if Input.is_key_pressed(KEY_S): z = 1.0
+	var direction := (transform.basis.x * x + transform.basis.z * z)
 	direction.y = 0.0
-
-	if direction.length() > 1.0:
-
-		direction = direction.normalized()
-
-	var speed := WALK_SPEED
-
-	if Input.is_key_pressed(KEY_SHIFT):
-
-		speed = SPRINT_SPEED
-
+	if direction.length() > 1.0: direction = direction.normalized()
+	var speed := SPRINT_SPEED if Input.is_key_pressed(KEY_SHIFT) else WALK_SPEED
 	if is_on_floor():
-
 		velocity.x = direction.x * speed
 		velocity.z = direction.z * speed
-
-		if Input.is_key_pressed(KEY_SPACE):
-
-			velocity.y = JUMP_SPEED
-
+		if Input.is_key_pressed(KEY_SPACE): velocity.y = JUMP_SPEED
 	else:
-
 		velocity.y -= GRAVITY * delta
 
-		velocity.x = move_toward(
-			velocity.x,
-			direction.x * speed,
-			AIR_CONTROL * delta
-		)
-
-		velocity.z = move_toward(
-			velocity.z,
-			direction.z * speed,
-			AIR_CONTROL * delta
-		)
-
-
-# ============================================================
-# CROSSHAIR
-# ============================================================
-
-func create_crosshair() -> void:
-
-	crosshair_layer = CanvasLayer.new()
-	crosshair_layer.name = "CrosshairLayer"
-
-	add_child(crosshair_layer)
-
-	var crosshair := Control.new()
-
-	crosshair.name = "Crosshair"
-	crosshair.mouse_filter = Control.MOUSE_FILTER_IGNORE
-
-	crosshair_layer.add_child(crosshair)
-
-	var viewport_size := (
-		camera
-		.get_viewport()
-		.get_visible_rect()
-		.size
-	)
-
-	crosshair.position = viewport_size * 0.5
-
-
-	var top := ColorRect.new()
-
-	top.color = Color.WHITE
-	top.size = Vector2(2, 8)
-	top.position = Vector2(-1, -14)
-
-	crosshair.add_child(top)
-
-
-	var bottom := ColorRect.new()
-
-	bottom.color = Color.WHITE
-	bottom.size = Vector2(2, 8)
-	bottom.position = Vector2(-1, 6)
-
-	crosshair.add_child(bottom)
-
-
-	var left := ColorRect.new()
-
-	left.color = Color.WHITE
-	left.size = Vector2(8, 2)
-	left.position = Vector2(-14, -1)
-
-	crosshair.add_child(left)
-
-
-	var right := ColorRect.new()
-
-	right.color = Color.WHITE
-	right.size = Vector2(8, 2)
-	right.position = Vector2(6, -1)
-
-	crosshair.add_child(right)
-
-
-# ============================================================
-# AIM
-# ============================================================
-
-func get_aim_ray() -> Dictionary:
-
-	var viewport = camera.get_viewport()
-
-	var size = viewport.get_visible_rect().size
-
-	var center = size * 0.5
-
-	var origin := camera.project_ray_origin(
-		center
-	)
-
-	var direction := (
-		camera.project_ray_normal(center)
-		.normalized()
-	)
-
-	return {
-		"origin": origin,
-		"direction": direction
-	}
-
-
-func get_aim_hit(
-	distance: float
-) -> Dictionary:
-
-	var ray := get_aim_ray()
-
-	var origin: Vector3 = ray["origin"]
-	var direction: Vector3 = ray["direction"]
-
-	var end := (
-		origin +
-		direction * distance
-	)
-
-	var query := PhysicsRayQueryParameters3D.create(
-		origin,
-		end
-	)
-
-	query.exclude = [self]
-
-	query.collide_with_bodies = true
-	query.collide_with_areas = true
-
-	var result := (
-		get_world_3d()
-		.direct_space_state
-		.intersect_ray(query)
-	)
-
-	return {
-		"origin": origin,
-		"end": end,
-		"result": result
-	}
-
-
-# ============================================================
-# VANDAL
-# ============================================================
-
-func shoot_vandal() -> void:
-
-	if reloading:
-		return
-
-	if fire_timer > 0.0:
-		return
-
-	if ammo <= 0:
-
-		reload_vandal()
-
-		return
-
-	ammo -= 1
-
-	fire_timer = VANDAL_FIRE_DELAY
-
-	make_muzzle_flash()
-
-	var shot := get_aim_hit(
-		VANDAL_RANGE
-	)
-
-	var result: Dictionary = shot["result"]
-
-	if result.is_empty():
-
-		print("VANDAL MISS")
-
-		return
-
-	var target = result["collider"]
-
-	print(
-		"VANDAL HIT: ",
-		target.name
-	)
-
-	damage_target(
-		target,
-		VANDAL_DAMAGE
-	)
-
-
-# ============================================================
-# DAMAGE
-# ============================================================
-
-func damage_target(
-	target: Object,
-	amount: float
-) -> void:
-
-	if target == null:
-
-		return
-
-	var current := target as Node
-
-	while current != null:
-
-		if current.has_method(
-			"take_damage"
-		):
-
-			current.take_damage(
-				amount
-			)
-
-			total_damage += amount
-			last_damage = amount
-
-			print(
-				"DAMAGE DEALT: ",
-				amount
-			)
-
-			if current.has_method(
-				"is_dead"
-			):
-
-				if current.is_dead():
-
-					kills += 1
-
-					reyna_soul_available = true
-
-					# Kill reward.
-					ult_points += 1
-
-					clamp_ult_points()
-
-					print(
-						"KILL: ",
-						kills,
-						" | ULT: ",
-						ult_points,
-						"/",
-						ult_cost
-					)
-
-			return
-
-		current = current.get_parent()
-
-
-# ============================================================
-# RELOAD
-# ============================================================
-
-func reload_vandal() -> void:
-
-	if current_weapon != WEAPON_VANDAL:
-		return
-
-	if reloading:
-		return
-
-	if ammo >= VANDAL_MAG_SIZE:
-		return
-
-	reloading = true
-
-	reload_timer = VANDAL_RELOAD_TIME
-
-	print(
-		"RELOADING..."
-	)
-
-
-func finish_reload() -> void:
-
-	ammo = VANDAL_MAG_SIZE
-
-	reloading = false
-
-	print(
-		"VANDAL RELOADED"
-	)
-
-
-# ============================================================
-# KARAMBIT
-# ============================================================
-
-func attack_karambit() -> void:
-
-	if knife_timer > 0.0:
-		return
-
-	knife_timer = KARAMBIT_DELAY
-
-	var shot := get_aim_hit(
-		KARAMBIT_RANGE
-	)
-
-	var result: Dictionary = shot["result"]
-
-	if not result.is_empty():
-
-		damage_target(
-			result["collider"],
-			KARAMBIT_DAMAGE
-		)
-
-
-# ============================================================
-# WEAPON SWITCHING
-# ============================================================
-
-func equip_vandal() -> void:
-
-	current_weapon = WEAPON_VANDAL
-
-	if vandal != null:
-
-		vandal.visible = true
-
-	if karambit != null:
-
-		karambit.visible = false
-
-	if left_hand != null:
-
-		left_hand.visible = true
-
-
-func equip_karambit() -> void:
-
-	current_weapon = WEAPON_KARAMBIT
-
-	if vandal != null:
-
-		vandal.visible = false
-
-	if karambit != null:
-
-		karambit.visible = true
-
-	if left_hand != null:
-
-		left_hand.visible = false
-
-
-# ============================================================
-# AGENT SELECTION
-# ============================================================
-
-func set_selected_agent(
-	agent_name: String
-) -> void:
-
-	match agent_name:
-
-		"Jett":
-			selected_agent = 1
-
-		"Reyna":
-			selected_agent = 2
-
-		"Omen":
-			selected_agent = 3
-
-		_:
-			selected_agent = 1
-
-	update_ult_cost()
-
-	print(
-		"AGENT: ",
-		get_selected_agent_name(),
-		" | ULT ",
-		ult_points,
-		"/",
-		ult_cost
-	)
-
-
-func get_selected_agent_name() -> String:
-
-	match selected_agent:
-
-		1:
-			return "Jett"
-
-		2:
-			return "Reyna"
-
-		3:
-			return "Omen"
-
-	return "Jett"
-
-
-# ============================================================
-# ULTIMATE SYSTEM
-# ============================================================
-
-func update_ult_cost() -> void:
-
-	match selected_agent:
-
-		1:
-			ult_cost = 8
-
-		2:
-			ult_cost = 6
-
-		3:
-			ult_cost = 7
-
-		_:
-			ult_cost = 8
-
-	clamp_ult_points()
-
-
-func collect_ultimate_orb() -> void:
-
-	ult_points += 1
-
-	clamp_ult_points()
-
-	print(
-		"ULT ORB COLLECTED: ",
-		ult_points,
-		"/",
-		ult_cost
-	)
-
-
-func clamp_ult_points() -> void:
-
-	ult_points = min(
-		ult_points,
-		ult_cost
-	)
-
-
-func has_ultimate() -> bool:
-
-	return (
-		ult_points >= ult_cost
-	)
-
-
-func spend_ultimate() -> bool:
-
-	if not has_ultimate():
-
-		print(
-			"ULT NOT READY: ",
-			ult_points,
-			"/",
-			ult_cost
-		)
-
-		return false
-
-	ult_points -= ult_cost
-
-	print(
-		"ULT USED: ",
-		ult_points,
-		"/",
-		ult_cost
-	)
-
-	return true
-
-
-# ============================================================
-# ABILITY SYSTEM
-# ============================================================
-
-func use_ability_slot(
-	key: String
-) -> void:
-
-	if not ability_ready:
-
-		print(
-			"ABILITY ON COOLDOWN"
-		)
-
-		return
-
-	match selected_agent:
-
-		1:
-			use_jett_ability(key)
-
-		2:
-			use_reyna_ability(key)
-
-		3:
-			use_omen_ability(key)
-
-
-func start_ability_cooldown(
-	seconds: float
-) -> void:
-
-	ability_ready = false
-
-	ability_cooldown = seconds
-
-
-# ============================================================
-# JETT
-# ============================================================
-
-func use_jett_ability(
-	key: String
-) -> void:
-
-	match key:
-
-		"C":
-			jett_cloudburst()
-
-		"Q":
-			jett_updraft()
-
-		"E":
-			jett_tailwind()
-
-		"X":
-			jett_blade_storm()
-
-
-func jett_cloudburst() -> void:
-
-	start_ability_cooldown(
-		6.0
-	)
-
-	print(
-		"JETT - CLOUDBURST"
-	)
-
-	var smoke := MeshInstance3D.new()
-
-	smoke.name = "Cloudburst"
-
-	var mesh := SphereMesh.new()
-
-	mesh.radius = 2.8
-	mesh.height = 5.6
-
-	smoke.mesh = mesh
-
-
-	var shot := get_aim_hit(
-		20.0
-	)
-
-	if not shot["result"].is_empty():
-
-		smoke.global_position = (
-			shot["result"]["position"]
-		)
-
-	else:
-
-		smoke.global_position = (
-			camera.global_position
-			-
-			camera.global_transform.basis.z *
-			12.0
-		)
-
-
-	var material := StandardMaterial3D.new()
-
-	material.transparency = (
-		BaseMaterial3D.TRANSPARENCY_ALPHA
-	)
-
-	material.shading_mode = (
-		BaseMaterial3D.SHADING_MODE_UNSHADED
-	)
-
-	material.cull_mode = (
-		BaseMaterial3D.CULL_DISABLED
-	)
-
-	material.albedo_color = Color(
-		0.18,
-		0.27,
-		0.50,
-		0.80
-	)
-
-	smoke.material_override = material
-
-
-	get_tree().current_scene.add_child(
-		smoke
-	)
-
-
-	await get_tree().create_timer(
-		2.5
-	).timeout
-
-
-	if is_instance_valid(smoke):
-
-		smoke.queue_free()
-
-
-func jett_updraft() -> void:
-
-	if not is_on_floor():
-
-		return
-
-	start_ability_cooldown(
-		6.0
-	)
-
-	print(
-		"JETT - UPDRAFT"
-	)
-
-	velocity.y = 10.0
-
-
-func jett_tailwind() -> void:
-
-	start_ability_cooldown(
-		8.0
-	)
-
-	print(
-		"JETT - TAILWIND"
-	)
-
-	var direction := (
-		-transform.basis.z
-	)
-
-	direction.y = 0.0
-
-	if direction.length() > 0.0:
-
-		direction = direction.normalized()
-
-	velocity = (
-		direction *
-		22.0
-	)
-
-
-func jett_blade_storm() -> void:
-
-	if not spend_ultimate():
-
-		return
-
-	start_ability_cooldown(
-		3.0
-	)
-
-	print(
-		"JETT - BLADE STORM"
-	)
-
-	equip_karambit()
-
-
-# ============================================================
-# REYNA
-# ============================================================
-
-func use_reyna_ability(
-	key: String
-) -> void:
-
-	match key:
-
-		"C":
-			reyna_leer()
-
-		"Q":
-			reyna_devour()
-
-		"E":
-			reyna_dismiss()
-
-		"X":
-			reyna_empress()
-
-
-func reyna_leer() -> void:
-
-	start_ability_cooldown(
-		6.0
-	)
-
-	print(
-		"REYNA - LEER"
-	)
-
-	var eye := MeshInstance3D.new()
-
-	eye.name = "Leer"
-
-	var mesh := SphereMesh.new()
-
-	mesh.radius = 0.4
-	mesh.height = 0.8
-
-	eye.mesh = mesh
-
-
-	var shot := get_aim_hit(
-		10.0
-	)
-
-	if not shot["result"].is_empty():
-
-		eye.global_position = (
-			shot["result"]["position"]
-		)
-
-	else:
-
-		eye.global_position = (
-			camera.global_position
-			-
-			camera.global_transform.basis.z *
-			8.0
-		)
-
-
-	var material := StandardMaterial3D.new()
-
-	material.albedo_color = Color(
-		0.65,
-		0.10,
-		0.90
-	)
-
-	material.emission_enabled = true
-
-	material.emission = Color(
-		0.40,
-		0.02,
-		0.70
-	)
-
-	material.emission_energy_multiplier = 2.0
-
-	eye.material_override = material
-
-
-	get_tree().current_scene.add_child(
-		eye
-	)
-
-
-	await get_tree().create_timer(
-		4.0
-	).timeout
-
-
-	if is_instance_valid(eye):
-
-		eye.queue_free()
-
-
-func reyna_devour() -> void:
-
-	if not reyna_soul_available:
-
-		print(
-			"REYNA - NO SOUL"
-		)
-
-		return
-
-	start_ability_cooldown(
-		8.0
-	)
-
-	reyna_soul_available = false
-
-	health = min(
-		health + 50.0,
-		max_health
-	)
-
-	print(
-		"REYNA - DEVOUR | HP ",
-		health
-	)
-
-
-func reyna_dismiss() -> void:
-
-	if not reyna_soul_available:
-
-		print(
-			"REYNA - NO SOUL"
-		)
-
-		return
-
-	start_ability_cooldown(
-		8.0
-	)
-
-	reyna_soul_available = false
-
-	print(
-		"REYNA - DISMISS"
-	)
-
-	visible = false
-
-	var old_layer := collision_layer
-
-	collision_layer = 0
-
-
-	await get_tree().create_timer(
-		2.0
-	).timeout
-
-
-	visible = true
-
-	collision_layer = old_layer
-
-
-func reyna_empress() -> void:
-
-	if not spend_ultimate():
-
-		return
-
-	start_ability_cooldown(
-		3.0
-	)
-
-	reyna_empress_active = true
-
-	print(
-		"REYNA - EMPRESS"
-	)
-
-	await get_tree().create_timer(
-		10.0
-	).timeout
-
-	reyna_empress_active = false
-
-
-# ============================================================
-# OMEN
-# ============================================================
-
-func use_omen_ability(
-	key: String
-) -> void:
-
-	match key:
-
-		"C":
-			omen_shrouded_step()
-
-		"Q":
-			omen_paranoia()
-
-		"E":
-			omen_dark_cover()
-
-		"X":
-			omen_from_the_shadows()
-
-
-func omen_shrouded_step() -> void:
-
-	start_ability_cooldown(
-		7.0
-	)
-
-	print(
-		"OMEN - SHROUDED STEP"
-	)
-
-	var ray := get_aim_ray()
-
-	var origin: Vector3 = ray["origin"]
-	var direction: Vector3 = ray["direction"]
-
-	var destination := (
-		global_position +
-		direction * 8.0
-	)
-
-
-	var query := PhysicsRayQueryParameters3D.create(
-		origin,
-		origin +
-		direction * 8.0
-	)
-
-	query.exclude = [self]
-
-
-	var result := (
-		get_world_3d()
-		.direct_space_state
-		.intersect_ray(query)
-	)
-
-
-	if not result.is_empty():
-
-		destination = (
-			result["position"] -
-			direction
-		)
-
-
-	destination.y = (
-		global_position.y
-	)
-
-	global_position = destination
-
-
-func omen_paranoia() -> void:
-
-	start_ability_cooldown(
-		8.0
-	)
-
-	print(
-		"OMEN - PARANOIA"
-	)
-
-
-func omen_dark_cover() -> void:
-
-	start_ability_cooldown(
-		12.0
-	)
-
-	print(
-		"OMEN - DARK COVER"
-	)
-
-	var smoke := MeshInstance3D.new()
-
-	smoke.name = "DarkCover"
-
-	var mesh := SphereMesh.new()
-
-	mesh.radius = 3.0
-	mesh.height = 6.0
-
-	smoke.mesh = mesh
-
-
-	var shot := get_aim_hit(
-		20.0
-	)
-
-	if not shot["result"].is_empty():
-
-		smoke.global_position = (
-			shot["result"]["position"]
-		)
-
-	else:
-
-		smoke.global_position = (
-			global_position
-			-
-			transform.basis.z *
-			12.0
-		)
-
-
-	var material := StandardMaterial3D.new()
-
-	material.transparency = (
-		BaseMaterial3D.TRANSPARENCY_ALPHA
-	)
-
-	material.shading_mode = (
-		BaseMaterial3D.SHADING_MODE_UNSHADED
-	)
-
-	material.albedo_color = Color(
-		0.08,
-		0.06,
-		0.16,
-		0.60
-	)
-
-	smoke.material_override = material
-
-
-	get_tree().current_scene.add_child(
-		smoke
-	)
-
-
-	await get_tree().create_timer(
-		8.0
-	).timeout
-
-
-	if is_instance_valid(smoke):
-
-		smoke.queue_free()
-
-
-func omen_from_the_shadows() -> void:
-
-	if not spend_ultimate():
-
-		return
-
-	start_ability_cooldown(
-		5.0
-	)
-
-	print(
-		"OMEN - FROM THE SHADOWS"
-	)
-
-	var direction := (
-		-transform.basis.z
-	)
-
-	direction.y = 0.0
-
-	if direction.length() > 0.0:
-
-		direction = direction.normalized()
-
-	global_position += (
-		direction *
-		20.0
-	)
-
-
-# ============================================================
-# WEAPON HOLDER
-# ============================================================
+func current_weapon() -> int:
+	return 1 if karambit != null and karambit.visible else 0
 
 func create_weapon_holder() -> void:
-
 	weapon_holder = Node3D.new()
-
 	weapon_holder.name = "WeaponHolder"
+	weapon_holder.position = Vector3(0.32, -0.28, -0.60)
+	camera.add_child(weapon_holder)
 
-	weapon_holder.position = Vector3(
-		0.32,
-		-0.28,
-		-0.60
-	)
-
-	camera.add_child(
-		weapon_holder
-	)
-
-
-# ============================================================
-# HANDS
-# ============================================================
+func create_crosshair() -> void:
+	var layer := CanvasLayer.new()
+	layer.name = "CrosshairLayer"
+	add_child(layer)
+	var crosshair := Control.new()
+	crosshair.position = camera.get_viewport().get_visible_rect().size * 0.5
+	crosshair.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(crosshair)
+	for spec in [Vector4(-1,-14,2,8), Vector4(-1,6,2,8), Vector4(-14,-1,8,2), Vector4(6,-1,8,2)]:
+		var bar := ColorRect.new()
+		bar.color = Color.WHITE
+		bar.position = Vector2(spec.x, spec.y)
+		bar.size = Vector2(spec.z, spec.w)
+		bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		crosshair.add_child(bar)
 
 func create_hands() -> void:
-
-	var skin := StandardMaterial3D.new()
-
-	skin.albedo_color = Color(
-		0.62,
-		0.38,
-		0.25
-	)
-
-
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.62, 0.38, 0.25)
 	left_hand = MeshInstance3D.new()
-
-	left_hand.name = "LeftHand"
-
-	var left_mesh := CapsuleMesh.new()
-
-	left_mesh.radius = 0.075
-	left_mesh.height = 0.38
-
-	left_hand.mesh = left_mesh
-
-	left_hand.position = Vector3(
-		-0.18,
-		-0.15,
-		-0.45
-	)
-
-	left_hand.rotation_degrees = Vector3(
-		-25.0,
-		0.0,
-		-15.0
-	)
-
-	left_hand.material_override = skin
-
-	weapon_holder.add_child(
-		left_hand
-	)
-
-
+	var lm := CapsuleMesh.new(); lm.radius = 0.075; lm.height = 0.38
+	left_hand.mesh = lm; left_hand.position = Vector3(-0.18,-0.15,-0.45); left_hand.material_override = mat
+	weapon_holder.add_child(left_hand)
 	right_hand = MeshInstance3D.new()
-
-	right_hand.name = "RightHand"
-
-	var right_mesh := CapsuleMesh.new()
-
-	right_mesh.radius = 0.08
-	right_mesh.height = 0.40
-
-	right_hand.mesh = right_mesh
-
-	right_hand.position = Vector3(
-		0.14,
-		-0.17,
-		-0.47
-	)
-
-	right_hand.rotation_degrees = Vector3(
-		-25.0,
-		0.0,
-		10.0
-	)
-
-	right_hand.material_override = skin
-
-	weapon_holder.add_child(
-		right_hand
-	)
-
-
-# ============================================================
-# VANDAL MODEL
-# ============================================================
+	var rm := CapsuleMesh.new(); rm.radius = 0.08; rm.height = 0.40
+	right_hand.mesh = rm; right_hand.position = Vector3(0.14,-0.17,-0.47); right_hand.material_override = mat
+	weapon_holder.add_child(right_hand)
 
 func create_vandal() -> void:
-
-	vandal = Node3D.new()
-
-	vandal.name = "Vandal"
-
-	weapon_holder.add_child(
-		vandal
-	)
-
-
-	var dark := StandardMaterial3D.new()
-
-	dark.albedo_color = Color(
-		0.035,
-		0.04,
-		0.045
-	)
-
-	dark.metallic = 0.55
-	dark.roughness = 0.32
-
-
-	var dark_2 := StandardMaterial3D.new()
-
-	dark_2.albedo_color = Color(
-		0.075,
-		0.08,
-		0.085
-	)
-
-
-	var black := StandardMaterial3D.new()
-
-	black.albedo_color = Color(
-		0.015,
-		0.017,
-		0.019
-	)
-
-
-	# Receiver
-	var receiver := MeshInstance3D.new()
-
-	var receiver_mesh := BoxMesh.new()
-
-	receiver_mesh.size = Vector3(
-		0.24,
-		0.22,
-		0.92
-	)
-
-	receiver.mesh = receiver_mesh
-
-	receiver.position = Vector3(
-		0.0,
-		0.02,
-		-0.05
-	)
-
-	receiver.material_override = dark
-
-	vandal.add_child(
-		receiver
-	)
-
-
-	# Upper
-	var upper := MeshInstance3D.new()
-
-	var upper_mesh := BoxMesh.new()
-
-	upper_mesh.size = Vector3(
-		0.23,
-		0.13,
-		0.90
-	)
-
-	upper.mesh = upper_mesh
-
-	upper.position = Vector3(
-		0.0,
-		0.16,
-		-0.05
-	)
-
-	upper.material_override = dark_2
-
-	vandal.add_child(
-		upper
-	)
-
-
-	# Handguard
-	var handguard := MeshInstance3D.new()
-
-	var handguard_mesh := BoxMesh.new()
-
-	handguard_mesh.size = Vector3(
-		0.21,
-		0.17,
-		0.78
-	)
-
-	handguard.mesh = handguard_mesh
-
-	handguard.position = Vector3(
-		0.0,
-		0.02,
-		-0.88
-	)
-
-	handguard.material_override = black
-
-	vandal.add_child(
-		handguard
-	)
-
-
-	# Carry handle
-	var carry_handle := MeshInstance3D.new()
-
-	var carry_mesh := BoxMesh.new()
-
-	carry_mesh.size = Vector3(
-		0.16,
-		0.10,
-		0.58
-	)
-
-	carry_handle.mesh = carry_mesh
-
-	carry_handle.position = Vector3(
-		0.0,
-		0.33,
-		0.02
-	)
-
-	carry_handle.material_override = dark_2
-
-	vandal.add_child(
-		carry_handle
-	)
-
-
-	# Barrel
-	var barrel := MeshInstance3D.new()
-
-	var barrel_mesh := CylinderMesh.new()
-
-	barrel_mesh.top_radius = 0.027
-	barrel_mesh.bottom_radius = 0.040
-	barrel_mesh.height = 0.95
-
-	barrel.mesh = barrel_mesh
-
-	barrel.rotation_degrees.x = 90.0
-
-	barrel.position = Vector3(
-		0.0,
-		0.055,
-		-1.72
-	)
-
-	barrel.material_override = dark
-
-	vandal.add_child(
-		barrel
-	)
-
-
-	# Muzzle
-	var muzzle_device := MeshInstance3D.new()
-
-	var muzzle_mesh := CylinderMesh.new()
-
-	muzzle_mesh.top_radius = 0.06
-	muzzle_mesh.bottom_radius = 0.06
-	muzzle_mesh.height = 0.24
-
-	muzzle_device.mesh = muzzle_mesh
-
-	muzzle_device.rotation_degrees.x = 90.0
-
-	muzzle_device.position = Vector3(
-		0.0,
-		0.055,
-		-2.20
-	)
-
-	muzzle_device.material_override = black
-
-	vandal.add_child(
-		muzzle_device
-	)
-
-
-	# Magazine
-	var magazine := MeshInstance3D.new()
-
-	var magazine_mesh := BoxMesh.new()
-
-	magazine_mesh.size = Vector3(
-		0.16,
-		0.48,
-		0.24
-	)
-
-	magazine.mesh = magazine_mesh
-
-	magazine.position = Vector3(
-		0.0,
-		-0.30,
-		0.03
-	)
-
-	magazine.rotation_degrees.x = -18.0
-
-	magazine.material_override = black
-
-	vandal.add_child(
-		magazine
-	)
-
-
-	# Grip
-	var grip := MeshInstance3D.new()
-
-	var grip_mesh := BoxMesh.new()
-
-	grip_mesh.size = Vector3(
-		0.15,
-		0.38,
-		0.18
-	)
-
-	grip.mesh = grip_mesh
-
-	grip.position = Vector3(
-		0.0,
-		-0.25,
-		0.42
-	)
-
-	grip.rotation_degrees.x = -13.0
-
-	grip.material_override = black
-
-	vandal.add_child(
-		grip
-	)
-
-
-	# Stock
-	var stock := MeshInstance3D.new()
-
-	var stock_mesh := BoxMesh.new()
-
-	stock_mesh.size = Vector3(
-		0.22,
-		0.23,
-		0.62
-	)
-
-	stock.mesh = stock_mesh
-
-	stock.position = Vector3(
-		0.0,
-		0.02,
-		0.92
-	)
-
-	stock.material_override = dark
-
-	vandal.add_child(
-		stock
-	)
-
-
-	# Muzzle marker
-	var muzzle := Marker3D.new()
-
-	muzzle.name = "Muzzle"
-
-	muzzle.position = Vector3(
-		0.0,
-		0.055,
-		-2.30
-	)
-
-	vandal.add_child(
-		muzzle
-	)
-
-
-# ============================================================
-# KARAMBIT MODEL
-# ============================================================
+	vandal = Node3D.new(); vandal.name = "Vandal"; weapon_holder.add_child(vandal)
+	var mat := StandardMaterial3D.new(); mat.albedo_color = Color(0.04,0.045,0.05); mat.metallic = 0.5; mat.roughness = 0.35
+	var receiver := MeshInstance3D.new(); var r := BoxMesh.new(); r.size = Vector3(0.24,0.22,0.92); receiver.mesh=r; receiver.position=Vector3(0,0.02,-0.05); receiver.material_override=mat; vandal.add_child(receiver)
+	var barrel := MeshInstance3D.new(); var b := CylinderMesh.new(); b.top_radius=0.035; b.bottom_radius=0.04; b.height=1.05; barrel.mesh=b; barrel.rotation_degrees.x=90; barrel.position=Vector3(0,0.05,-1.15); barrel.material_override=mat; vandal.add_child(barrel)
+	var grip := MeshInstance3D.new(); var g := BoxMesh.new(); g.size=Vector3(0.15,0.40,0.18); grip.mesh=g; grip.position=Vector3(0,-0.25,0.42); grip.rotation_degrees.x=-13; grip.material_override=mat; vandal.add_child(grip)
+	var magazine := MeshInstance3D.new(); var m := BoxMesh.new(); m.size=Vector3(0.16,0.48,0.24); magazine.mesh=m; magazine.position=Vector3(0,-0.30,0.03); magazine.rotation_degrees.x=-18; magazine.material_override=mat; vandal.add_child(magazine)
 
 func create_karambit() -> void:
+	karambit = Node3D.new(); karambit.name = "Karambit"; weapon_holder.add_child(karambit)
+	var blade_mat := StandardMaterial3D.new(); blade_mat.albedo_color=Color(0.75,0.78,0.82); blade_mat.metallic=0.9; blade_mat.roughness=0.15
+	var handle_mat := StandardMaterial3D.new(); handle_mat.albedo_color=Color(0.025,0.03,0.035)
+	var blade := MeshInstance3D.new(); var bm := BoxMesh.new(); bm.size=Vector3(0.07,0.16,0.55); blade.mesh=bm; blade.position=Vector3(0,0.02,-0.28); blade.rotation_degrees.z=-25; blade.material_override=blade_mat; karambit.add_child(blade)
+	var handle := MeshInstance3D.new(); var hm := CapsuleMesh.new(); hm.radius=0.065; hm.height=0.36; handle.mesh=hm; handle.position=Vector3(0.04,-0.02,0.18); handle.rotation_degrees.z=90; handle.material_override=handle_mat; karambit.add_child(handle)
+	var ring := MeshInstance3D.new(); var tm := TorusMesh.new(); tm.inner_radius=0.075; tm.outer_radius=0.12; ring.mesh=tm; ring.position=Vector3(0.04,-0.02,0.39); ring.rotation_degrees.x=90; ring.material_override=handle_mat; karambit.add_child(ring)
+	karambit.position=Vector3(0.20,-0.30,-0.65)
+	karambit.rotation_degrees=Vector3(-8,15,-8)
 
-	karambit = Node3D.new()
+func equip_vandal() -> void:
+	vandal.visible=true; karambit.visible=false; left_hand.visible=true; right_hand.visible=true
 
-	karambit.name = "Karambit"
+func equip_karambit() -> void:
+	vandal.visible=false; karambit.visible=true; left_hand.visible=false; right_hand.visible=true
 
-	weapon_holder.add_child(
-		karambit
-	)
+func get_aim_ray() -> Dictionary:
+	var center := camera.get_viewport().get_visible_rect().size * 0.5
+	return {"origin": camera.project_ray_origin(center), "direction": camera.project_ray_normal(center).normalized()}
 
+func get_aim_hit(distance: float) -> Dictionary:
+	var ray := get_aim_ray(); var origin: Vector3 = ray.origin; var dir: Vector3 = ray.direction
+	var query := PhysicsRayQueryParameters3D.create(origin, origin + dir * distance)
+	query.exclude=[self]; query.collide_with_bodies=true; query.collide_with_areas=true
+	return {"result": get_world_3d().direct_space_state.intersect_ray(query)}
 
-	var blade_material := StandardMaterial3D.new()
+func shoot_vandal() -> void:
+	if reloading or fire_timer > 0.0: return
+	if ammo <= 0: reload_vandal(); return
+	ammo -= 1; fire_timer=VANDAL_FIRE_DELAY
+	var hit := get_aim_hit(VANDAL_RANGE).result
+	if not hit.is_empty(): damage_target(hit.collider, VANDAL_DAMAGE)
 
-	blade_material.albedo_color = Color(
-		0.72,
-		0.74,
-		0.77
-	)
+func reload_vandal() -> void:
+	if ammo >= VANDAL_MAG_SIZE or reloading: return
+	reloading=true; reload_timer=VANDAL_RELOAD_TIME
 
-	blade_material.metallic = 0.90
+func finish_reload() -> void:
+	ammo=VANDAL_MAG_SIZE; reloading=false
 
+func attack_karambit() -> void:
+	if knife_attacking or knife_timer > 0.0: return
+	knife_attacking=true; knife_timer=KARAMBIT_DELAY
+	var start_pos := karambit.position; var start_rot := karambit.rotation_degrees
+	var t := create_tween().set_parallel(true)
+	t.tween_property(karambit,"position",start_pos+Vector3(0.08,-0.02,0.05),0.05)
+	t.tween_property(karambit,"rotation_degrees",start_rot+Vector3(10,-10,25),0.05)
+	await t.finished
+	var slash := create_tween().set_parallel(true)
+	slash.tween_property(karambit,"position",start_pos+Vector3(-0.20,0.10,0.10),0.08)
+	slash.tween_property(karambit,"rotation_degrees",start_rot+Vector3(-30,20,-85),0.08)
+	await slash.finished
+	var hit := get_aim_hit(KARAMBIT_RANGE).result
+	if not hit.is_empty(): damage_target(hit.collider,KARAMBIT_DAMAGE)
+	var back := create_tween().set_parallel(true)
+	back.tween_property(karambit,"position",start_pos,0.14)
+	back.tween_property(karambit,"rotation_degrees",start_rot,0.14)
+	await back.finished
+	knife_attacking=false
 
-	var handle_material := StandardMaterial3D.new()
+func damage_target(target: Object, amount: float) -> void:
+	if target == null: return
+	var node := target as Node
+	while node != null:
+		if node.has_method("take_damage"):
+			node.take_damage(amount); total_damage += amount
+			if node.has_method("is_dead") and node.is_dead():
+				kills += 1; reyna_soul_available=true; ult_points=min(ult_points+1,ult_cost)
+			return
+		node=node.get_parent()
 
-	handle_material.albedo_color = Color(
-		0.025,
-		0.025,
-		0.03
-	)
+func set_selected_agent(agent_name: String) -> void:
+	match agent_name:
+		"Jett": selected_agent=1
+		"Reyna": selected_agent=2
+		"Omen": selected_agent=3
+		_: selected_agent=1
+	match selected_agent:
+		1: ult_cost=8
+		2: ult_cost=6
+		3: ult_cost=7
+	ult_points=min(ult_points,ult_cost)
 
+func collect_ultimate_orb() -> void:
+	ult_points=min(ult_points+1,ult_cost)
+	print("ULT ",ult_points,"/",ult_cost)
 
-	var gold_material := StandardMaterial3D.new()
+func spend_ultimate() -> bool:
+	if ult_points < ult_cost: return false
+	ult_points -= ult_cost
+	return true
 
-	gold_material.albedo_color = Color(
-		0.88,
-		0.62,
-		0.15
-	)
+func use_ability(key: String) -> void:
+	if ability_cooldown > 0.0: return
+	match selected_agent:
+		1: use_jett(key)
+		2: use_reyna(key)
+		3: use_omen(key)
 
+func use_jett(key: String) -> void:
+	match key:
+		"C": cloudburst()
+		"Q": updraft()
+		"E": tailwind()
+		"X":
+			if spend_ultimate(): print("BLADE STORM")
 
-	var blade := MeshInstance3D.new()
+func cloudburst() -> void:
+	ability_cooldown=2.5
+	var smoke:=MeshInstance3D.new(); var mesh:=SphereMesh.new(); mesh.radius=2.6; mesh.height=5.2; smoke.mesh=mesh
+	var hit:=get_aim_hit(20.0).result
+	if not hit.is_empty(): smoke.global_position=hit.position
+	else: smoke.global_position=camera.global_position-camera.global_transform.basis.z*12.0
+	var mat:=StandardMaterial3D.new(); mat.transparency=BaseMaterial3D.TRANSPARENCY_ALPHA; mat.albedo_color=Color(0.20,0.35,0.75,0.72); mat.shading_mode=BaseMaterial3D.SHADING_MODE_UNSHADED; smoke.material_override=mat
+	get_tree().current_scene.add_child(smoke)
+	await get_tree().create_timer(2.5).timeout
+	if is_instance_valid(smoke): smoke.queue_free()
 
-	var blade_mesh := TorusMesh.new()
+func updraft() -> void:
+	if is_on_floor(): velocity.y=10.0; ability_cooldown=6.0
 
-	blade_mesh.inner_radius = 0.15
-	blade_mesh.outer_radius = 0.28
+func tailwind() -> void:
+	ability_cooldown=8.0; velocity=-transform.basis.z*22.0
 
-	blade.mesh = blade_mesh
+func use_reyna(key: String) -> void:
+	match key:
+		"C": ability_cooldown=6.0
+		"Q":
+			if reyna_soul_available: reyna_soul_available=false; health=min(max_health,health+50.0); ability_cooldown=8.0
+		"E":
+			if reyna_soul_available: reyna_soul_available=false; visible=false; collision_layer=0; await get_tree().create_timer(2.0).timeout; visible=true; collision_layer=1
+		"X":
+			if spend_ultimate(): ability_cooldown=10.0
 
-	blade.scale = Vector3(
-		0.8,
-		0.2,
-		1.1
-	)
-
-	blade.rotation_degrees.x = 90.0
-
-	blade.position = Vector3(
-		0.0,
-		0.05,
-		-0.25
-	)
-
-	blade.material_override = blade_material
-
-	karambit.add_child(
-		blade
-	)
-
-
-	var handle := MeshInstance3D.new()
-
-	var handle_mesh := CapsuleMesh.new()
-
-	handle_mesh.radius = 0.07
-	handle_mesh.height = 0.42
-
-	handle.mesh = handle_mesh
-
-	handle.position = Vector3(
-		0.15,
-		0.0,
-		0.20
-	)
-
-	handle.rotation_degrees.z = 90.0
-
-	handle.material_override = handle_material
-
-	karambit.add_child(
-		handle
-	)
-
-
-	var ring := MeshInstance3D.new()
-
-	var ring_mesh := TorusMesh.new()
-
-	ring_mesh.inner_radius = 0.08
-	ring_mesh.outer_radius = 0.13
-
-	ring.mesh = ring_mesh
-
-	ring.rotation_degrees.x = 90.0
-
-	ring.position = Vector3(
-		0.34,
-		0.0,
-		0.30
-	)
-
-	ring.material_override = gold_material
-
-	karambit.add_child(
-		ring
-	)
-
-
-# ============================================================
-# MUZZLE FLASH
-# ============================================================
-
-func make_muzzle_flash() -> void:
-
-	if vandal == null:
-		return
-
-	var light := OmniLight3D.new()
-
-	light.light_energy = 4.0
-	light.omni_range = 2.0
-
-	light.position = Vector3(
-		0.0,
-		0.0,
-		-1.1
-	)
-
-	vandal.add_child(
-		light
-	)
-
-	await get_tree().create_timer(
-		0.035
-	).timeout
-
-	if is_instance_valid(light):
-
-		light.queue_free()
+func use_omen(key: String) -> void:
+	match key:
+		"C":
+			ability_cooldown=7.0; global_position += -transform.basis.z*8.0
+		"Q": ability_cooldown=8.0
+		"E":
+			ability_cooldown=8.0
+			var smoke:=MeshInstance3D.new(); var mesh:=SphereMesh.new(); mesh.radius=3.0; mesh.height=6.0; smoke.mesh=mesh; smoke.global_position=camera.global_position-camera.global_transform.basis.z*12.0
+			var mat:=StandardMaterial3D.new(); mat.transparency=BaseMaterial3D.TRANSPARENCY_ALPHA; mat.albedo_color=Color(0.08,0.06,0.16,0.60); smoke.material_override=mat; get_tree().current_scene.add_child(smoke)
+			await get_tree().create_timer(8.0).timeout
+			if is_instance_valid(smoke): smoke.queue_free()
+		"X":
+			if spend_ultimate(): ability_cooldown=5.0
